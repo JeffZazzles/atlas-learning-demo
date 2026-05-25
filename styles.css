@@ -606,6 +606,40 @@ textarea {
   padding: 14px;
 }
 
+.subject-minute-editor {
+  background: #f9fbfb;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+  padding: 14px;
+}
+
+.subject-minute-list {
+  display: grid;
+  gap: 8px;
+}
+
+.subject-minute-row {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(0, 1fr) 110px;
+  padding: 10px 12px;
+}
+
+.subject-minute-row span {
+  color: var(--muted);
+  display: block;
+  font-size: 12px;
+  font-weight: 750;
+  margin-top: 2px;
+}
+
 .date-box {
   color: var(--muted);
   font-size: 12px;
@@ -816,8 +850,59 @@ textarea {
 .mission-layout {
   display: grid;
   gap: 18px;
-  grid-template-columns: minmax(0, 0.95fr) minmax(380px, 1.05fr);
+  grid-template-columns: 1fr;
   margin-top: 18px;
+}
+
+.student-main {
+  margin-top: 18px;
+}
+
+.student-support-strip {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 14px;
+}
+
+.support-panel {
+  padding: 0;
+}
+
+.support-panel summary {
+  align-items: center;
+  cursor: pointer;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  list-style: none;
+  padding: 14px;
+}
+
+.support-panel summary::-webkit-details-marker {
+  display: none;
+}
+
+.support-panel summary::after {
+  color: #53657d;
+  content: "Open";
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.support-panel[open] summary::after {
+  content: "Close";
+}
+
+.support-panel > .badge-grid,
+.support-panel > .skill-list,
+.support-panel > .support-progress {
+  margin: 0 14px 14px;
+}
+
+.support-progress {
+  max-width: 280px;
 }
 
 .learn-hero-panel {
@@ -965,7 +1050,7 @@ textarea {
 }
 
 .badge-shelf {
-  margin-bottom: 18px;
+  margin-bottom: 0;
 }
 
 .badge-medal {
@@ -1158,6 +1243,15 @@ textarea {
   margin-bottom: 14px;
 }
 
+.monitor-workspace .secondary-tabs {
+  margin-bottom: 16px;
+}
+
+.monitor-panel {
+  border-top: 1px solid var(--line);
+  padding-top: 16px;
+}
+
 .question-box {
   background: #f9fbfb;
   border: 1px solid var(--line);
@@ -1221,6 +1315,94 @@ textarea {
 .skill-list {
   display: grid;
   gap: 10px;
+}
+
+.subject-overview-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  margin-bottom: 14px;
+}
+
+.subject-progress-card {
+  background: #ffffff;
+  border: 2px solid #dbe6f2;
+  border-radius: 8px;
+  color: var(--ink);
+  display: grid;
+  gap: 7px;
+  padding: 13px;
+  text-align: left;
+}
+
+.subject-progress-card.is-active {
+  background: #e8f1ff;
+  border-color: #82a9f7;
+}
+
+.subject-progress-card span,
+.subject-progress-card small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.subject-progress-card strong {
+  color: #175cd3;
+  font-size: 24px;
+  line-height: 1;
+}
+
+.subject-progress-card .progress-bar {
+  display: block;
+}
+
+.subject-progress-card .progress-fill {
+  display: block;
+}
+
+.compact-field {
+  margin: 0 0 14px;
+  max-width: 360px;
+}
+
+.quest-unit-list {
+  display: grid;
+  gap: 10px;
+}
+
+.quest-unit-group {
+  background: #ffffff;
+  border: 2px solid #dbe6f2;
+  border-radius: 8px;
+  padding: 0;
+}
+
+.quest-unit-group summary {
+  align-items: center;
+  cursor: pointer;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  list-style: none;
+  padding: 14px;
+}
+
+.quest-unit-group summary::-webkit-details-marker {
+  display: none;
+}
+
+.quest-unit-group summary span:not(.tag) {
+  color: var(--muted);
+  display: block;
+  font-size: 12px;
+  font-weight: 800;
+  margin-top: 3px;
+}
+
+.quest-unit-group .skill-list {
+  border-top: 1px solid var(--line);
+  padding: 12px;
 }
 
 .skill-row,
@@ -1394,6 +1576,7 @@ th {
   .portal-grid,
   .quest-strip,
   .quest-map,
+  .student-support-strip,
   .content-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -1429,9 +1612,11 @@ th {
   .learn-hero-panel,
   .quest-strip,
   .quest-map,
+  .student-support-strip,
   .content-grid,
   .student-hero,
   .admin-action,
+  .subject-minute-row,
   .schedule-item,
   .lesson-step,
   .skill-row,

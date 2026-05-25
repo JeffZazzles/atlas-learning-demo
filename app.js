@@ -757,11 +757,15 @@ function createInitialState() {
     scheduleConfig: {
       startDate: "2026-08-24",
       endDate: "2026-12-18",
-      mathMinutes: 240,
-      elaMinutes: 260,
+      subjectMinutes: {
+        math: 240,
+        ela: 260
+      },
       reviewBuffer: 18
     },
+    monitorTab: "heatmap",
     studentMode: "mission",
+    studentProgressSubject: "math",
     studentAnswer: null,
     diagnosticCursor: 0,
     diagnosticAnswers: [],
@@ -930,12 +934,28 @@ function loadState() {
     return {
       ...fresh,
       ...parsed,
+      scheduleConfig: mergeScheduleConfig(fresh.scheduleConfig, parsed.scheduleConfig),
       aiSettings: mergeAiSettings(fresh.aiSettings, parsed.aiSettings),
       students: Array.isArray(parsed.students) ? parsed.students : fresh.students
     };
   } catch (error) {
     return createInitialState();
   }
+}
+
+function mergeScheduleConfig(defaults, saved) {
+  if (!saved) return defaults;
+  const subjectMinutes = {
+    ...defaults.subjectMinutes,
+    ...(saved.subjectMinutes || {})
+  };
+  if (saved.mathMinutes && !saved.subjectMinutes?.math) subjectMinutes.math = saved.mathMinutes;
+  if (saved.elaMinutes && !saved.subjectMinutes?.ela) subjectMinutes.ela = saved.elaMinutes;
+  return {
+    ...defaults,
+    ...saved,
+    subjectMinutes
+  };
 }
 
 function mergeAiSettings(defaults, saved) {
@@ -1034,6 +1054,41 @@ function selectedSkills() {
   return ids.map((id) => SKILLS_BY_ID[id]).filter(Boolean);
 }
 
+function subjectLabel(subject) {
+  const labels = {
+    math: "Math",
+    ela: "ELA",
+    science: "Science",
+    social: "Social Studies",
+    world_language: "World Language"
+  };
+  return labels[subject] || titleFromId(subject);
+}
+
+function selectedSubjects() {
+  const subjects = selectedUnits().map((unit) => unit.subject);
+  return [...new Set(subjects)].sort((a, b) => subjectLabel(a).localeCompare(subjectLabel(b)));
+}
+
+function selectedSubjectBreakdown() {
+  const counts = selectedUnits().reduce((acc, unit) => {
+    acc[unit.subject] = (acc[unit.subject] || 0) + 1;
+    return acc;
+  }, {});
+  return Object.entries(counts)
+    .sort(([a], [b]) => subjectLabel(a).localeCompare(subjectLabel(b)))
+    .map(([subject, count]) => `${count} ${subjectLabel(subject)}`)
+    .join(" · ");
+}
+
+function subjectMinutes(subject) {
+  const minutes = state.scheduleConfig.subjectMinutes?.[subject];
+  if (minutes !== undefined && minutes !== "") return Number(minutes);
+  if (subject === "math") return Number(state.scheduleConfig.mathMinutes || 240);
+  if (subject === "ela") return Number(state.scheduleConfig.elaMinutes || 260);
+  return 240;
+}
+
 function updateStudent(studentId, updater) {
   state.students = state.students.map((student) => (student.id === studentId ? updater({ ...student }) : student));
   saveState();
@@ -1060,14 +1115,17 @@ function formatDate(dateValue) {
 }
 
 function generateSchedule() {
-  const bySubject = { math: [], ela: [] };
-  selectedUnits().forEach((unit) => bySubject[unit.subject].push(unit));
+  const bySubject = {};
+  selectedUnits().forEach((unit) => {
+    if (!bySubject[unit.subject]) bySubject[unit.subject] = [];
+    bySubject[unit.subject].push(unit);
+  });
   Object.values(bySubject).forEach((units) => units.sort((a, b) => a.sequence - b.sequence));
 
   const result = [];
   Object.entries(bySubject).forEach(([subject, units]) => {
     let cursor = state.scheduleConfig.startDate;
-    const weeklyMinutes = subject === "math" ? Number(state.scheduleConfig.mathMinutes) : Number(state.scheduleConfig.elaMinutes);
+    const weeklyMinutes = subjectMinutes(subject);
     const dailyMinutes = Math.max(20, weeklyMinutes / 5);
     units.forEach((unit) => {
       const adjustedMinutes = Math.round(unit.estimatedMinutes * (1 + Number(state.scheduleConfig.reviewBuffer) / 100));
@@ -1441,8 +1499,7 @@ function renderHeader(title, body, actions = "") {
 
 function renderPlanner() {
   const schedule = generateSchedule();
-  const mathCount = selectedUnits().filter((unit) => unit.subject === "math").length;
-  const elaCount = selectedUnits().filter((unit) => unit.subject === "ela").length;
+  const subjectBreakdown = selectedSubjectBreakdown() || "No subjects selected";
   const selectedMinutes = selectedUnits().reduce((sum, unit) => sum + unit.estimatedMinutes, 0);
   const actions = `
     <button class="secondary" type="button" data-action="select-demo-units">Recommended set</button>
@@ -1457,7 +1514,7 @@ function renderPlanner() {
     )}
 
     <section class="grid four">
-      ${metricCard("Selected units", `${state.selectedUnitIds.length}`, `${mathCount} Math and ${elaCount} ELA`)}
+      ${metricCard("Selected units", `${state.selectedUnitIds.length}`, subjectBreakdown)}
       ${metricCard("Baseline time", `${Math.round(selectedMinutes / 60)}h`, "Before reteach and review buffer")}
       ${metricCard("Review buffer", `${state.scheduleConfig.reviewBuffer}%`, "Reserved for reteach and retrieval")}
       ${metricCard("Class avg mastery", percent(classStats().classAverage), "Seeded demo classroom")}
@@ -1486,10 +1543,17 @@ function renderPlanner() {
         <div class="field-grid">
           ${renderConfigField("Start", "startDate", "date")}
           ${renderConfigField("End", "endDate", "date")}
-          ${renderConfigField("Math min/wk", "mathMinutes", "number")}
-          ${renderConfigField("ELA min/wk", "elaMinutes", "number")}
         </div>
-        <div class="field-grid" style="grid-template-columns: minmax(180px, 1fr); margin-top: 12px;">
+        <div class="subject-minute-editor">
+          <div>
+            <h4>Weekly Subject Time</h4>
+            <p class="small-note">The rows are generated from selected units, so future subjects can be added without redesigning this panel.</p>
+          </div>
+          <div class="subject-minute-list">
+            ${renderSubjectMinuteRows()}
+          </div>
+        </div>
+        <div class="field-grid" style="grid-template-columns: minmax(180px, 1fr); margin-top: 14px;">
           ${renderConfigField("Review buffer %", "reviewBuffer", "number")}
         </div>
         <div class="schedule-list" style="margin-top: 18px;">
@@ -1498,6 +1562,28 @@ function renderPlanner() {
       </div>
     </section>
   `;
+}
+
+function renderSubjectMinuteRows() {
+  const subjects = selectedSubjects();
+  if (!subjects.length) {
+    return `<div class="empty-state">Select units to set weekly minutes by subject.</div>`;
+  }
+  return subjects
+    .map((subject) => {
+      const minutes = subjectMinutes(subject);
+      const unitCount = selectedUnits().filter((unit) => unit.subject === subject).length;
+      return `
+        <label class="subject-minute-row">
+          <div>
+            <strong>${escapeHtml(subjectLabel(subject))}</strong>
+            <span>${unitCount} selected unit${unitCount === 1 ? "" : "s"}</span>
+          </div>
+          <input data-subject-minutes="${escapeHtml(subject)}" type="number" min="0" step="10" value="${escapeHtml(minutes)}" aria-label="${escapeHtml(subjectLabel(subject))} minutes per week">
+        </label>
+      `;
+    })
+    .join("");
 }
 
 function renderConfigField(label, key, type) {
@@ -1650,17 +1736,9 @@ function renderStudentLab() {
     <div class="student-portal">
       ${renderStudentHero(student)}
       ${state.studentNotice ? `<div class="feedback good student-notice">${escapeHtml(state.studentNotice)}</div>` : ""}
-      <section class="mission-layout">
-        <div>
-          ${renderStudentMode(student)}
-        </div>
-        <aside class="student-side-panel">
-          ${renderBadgeShelf(student)}
-          <div class="surface game-card">
-            <h3>Skill Powers</h3>
-            ${renderStudentSignalPanel(student)}
-          </div>
-        </aside>
+      ${renderStudentSupportStrip(student)}
+      <section class="student-main">
+        ${renderStudentMode(student)}
       </section>
     </div>
   `;
@@ -1719,13 +1797,14 @@ function studentBadges(student, completed, secureSkills) {
 function renderBadgeShelf(student) {
   const stats = studentGameStats(student);
   return `
-    <section class="surface badge-shelf">
-      <div class="toolbar">
+    <details class="surface support-panel badge-shelf">
+      <summary>
         <div>
           <h3>Badge Shelf</h3>
-          <p class="small-note">Earn badges by learning, practicing, and explaining your thinking.</p>
+          <p class="small-note">${stats.badges.length} earned · click to see details</p>
         </div>
-      </div>
+        <span class="tag green">${stats.badges.length}</span>
+      </summary>
       <div class="badge-grid">
         ${stats.badges.map((badge) => `
           <article class="badge-card">
@@ -1735,7 +1814,35 @@ function renderBadgeShelf(student) {
           </article>
         `).join("")}
       </div>
+    </details>
+  `;
+}
+
+function renderStudentSupportStrip(student) {
+  return `
+    <section class="student-support-strip" aria-label="Student progress summaries">
+      ${renderBadgeShelf(student)}
+      ${renderCompactSkillPowers(student)}
     </section>
+  `;
+}
+
+function renderCompactSkillPowers(student) {
+  const skill = SKILLS_BY_ID[state.activePracticeSkillId] || recommendedSkill(student, "math");
+  const mastery = student.mastery[skill.id];
+  const tone = mastery.score >= 0.76 ? "green" : mastery.score >= 0.58 ? "amber" : "red";
+  return `
+    <details class="surface support-panel">
+      <summary>
+        <div>
+          <h3>Skill Powers</h3>
+          <p class="small-note">${escapeHtml(shortSkillName(skill.title))} · ${percent(mastery.score)} power</p>
+        </div>
+        <span class="status-pill status-${mastery.status}">${kidStatusLabel(mastery.status)}</span>
+      </summary>
+      <div class="progress-bar support-progress"><div class="progress-fill ${tone}" style="width: ${Math.round(mastery.score * 100)}%;"></div></div>
+      ${renderStudentSignalPanel(student)}
+    </details>
   `;
 }
 
@@ -2326,19 +2433,70 @@ function renderOpenResponse() {
 }
 
 function renderStudentProgress(student) {
-  const skills = selectedSkills();
+  const subjects = selectedSubjects();
+  if (!subjects.length) {
+    return `<div class="surface"><div class="empty-state">No quests are selected yet.</div></div>`;
+  }
+  const activeSubject = subjects.includes(state.studentProgressSubject) ? state.studentProgressSubject : subjects[0];
+  const units = selectedUnits().filter((unit) => unit.subject === activeSubject).sort((a, b) => a.sequence - b.sequence);
   return `
     <div class="surface">
       <div class="toolbar">
         <div>
           <h3>My Quest Map</h3>
-          <p class="small-note">See which quests are ready, which need practice, and where to go next.</p>
+          <p class="small-note">Start with the quick subject overview, then choose one subject to see details.</p>
         </div>
       </div>
+      <div class="subject-overview-grid">
+        ${subjects.map((subject) => renderSubjectProgressCard(student, subject, activeSubject)).join("")}
+      </div>
+      <label class="field compact-field">
+        <span>Show quest details for</span>
+        <select data-progress-subject>
+          ${subjects.map((subject) => `<option value="${subject}" ${activeSubject === subject ? "selected" : ""}>${escapeHtml(subjectLabel(subject))}</option>`).join("")}
+        </select>
+      </label>
+      <div class="quest-unit-list">
+        ${units.map((unit, index) => renderProgressUnitGroup(student, unit, index === 0)).join("")}
+      </div>
+    </div>
+  `;
+}
+
+function renderProgressUnitGroup(student, unit, isOpen) {
+  const skills = unit.skillIds.map((id) => SKILLS_BY_ID[id]).filter(Boolean);
+  const scores = skills.map((skill) => student.mastery[skill.id]?.score || 0);
+  const average = scores.length ? scores.reduce((sum, score) => sum + score, 0) / scores.length : 0;
+  const ready = skills.filter((skill) => ["secure", "mastered"].includes(student.mastery[skill.id]?.status)).length;
+  return `
+    <details class="quest-unit-group" ${isOpen ? "open" : ""}>
+      <summary>
+        <div>
+          <strong>${escapeHtml(unit.title)}</strong>
+          <span>${ready}/${skills.length} quests ready</span>
+        </div>
+        <span class="tag ${average >= 0.76 ? "green" : average >= 0.58 ? "amber" : "red"}">${percent(average)}</span>
+      </summary>
       <div class="skill-list">
         ${skills.map((skill) => renderProgressSkill(student, skill)).join("")}
       </div>
-    </div>
+    </details>
+  `;
+}
+
+function renderSubjectProgressCard(student, subject, activeSubject) {
+  const skills = selectedSkills().filter((skill) => skill.subject === subject);
+  const scores = skills.map((skill) => student.mastery[skill.id]?.score || 0);
+  const average = scores.length ? scores.reduce((sum, score) => sum + score, 0) / scores.length : 0;
+  const ready = skills.filter((skill) => ["secure", "mastered"].includes(student.mastery[skill.id]?.status)).length;
+  const tone = average >= 0.76 ? "green" : average >= 0.58 ? "amber" : "red";
+  return `
+    <button class="subject-progress-card ${activeSubject === subject ? "is-active" : ""}" type="button" data-progress-subject-button="${subject}">
+      <span>${escapeHtml(subjectLabel(subject))}</span>
+      <strong>${percent(average)}</strong>
+      <small>${ready}/${skills.length} quests ready</small>
+      <i class="progress-bar" aria-hidden="true"><b class="progress-fill ${tone}" style="width: ${Math.round(average * 100)}%;"></b></i>
+    </button>
   `;
 }
 
@@ -2382,17 +2540,38 @@ function renderDashboard() {
       ${renderTeacherAiPanel()}
     </section>
 
-    <section class="grid two" style="margin-top: 18px;">
-      <div class="surface">
-        <div class="toolbar">
-          <div>
-            <h3>Skill Heatmap</h3>
-            <p class="small-note">The teacher sees a class pattern first, then drills into the evidence for any student.</p>
-          </div>
-        </div>
-        ${renderHeatmap()}
+    <section class="surface monitor-workspace" style="margin-top: 18px;">
+      ${renderMonitorTabs()}
+      ${renderMonitorPanel()}
+    </section>
+  `;
+}
+
+function renderMonitorTabs() {
+  const tabs = [
+    ["heatmap", "Skill Heatmap"],
+    ["alerts", "Alerts"],
+    ["validation", "Validation Queue"]
+  ];
+  const active = tabs.some(([id]) => id === state.monitorTab) ? state.monitorTab : "heatmap";
+  return `
+    <div class="toolbar">
+      <div>
+        <h3>Monitor Workspace</h3>
+        <p class="small-note">Switch between class patterns, urgent signals, and human-reviewed evidence.</p>
       </div>
-      <div class="surface">
+    </div>
+    <div class="secondary-tabs monitor-tabs" role="tablist" aria-label="Monitor sections">
+      ${tabs.map(([id, label]) => `<button class="secondary-tab ${active === id ? "is-active" : ""}" type="button" data-monitor-tab="${id}" role="tab" aria-selected="${active === id}">${escapeHtml(label)}</button>`).join("")}
+    </div>
+  `;
+}
+
+function renderMonitorPanel() {
+  const active = ["heatmap", "alerts", "validation"].includes(state.monitorTab) ? state.monitorTab : "heatmap";
+  if (active === "alerts") {
+    return `
+      <div class="monitor-panel">
         <div class="toolbar">
           <div>
             <h3>Alerts</h3>
@@ -2403,19 +2582,33 @@ function renderDashboard() {
           ${renderAlerts()}
         </div>
       </div>
-    </section>
-
-    <section class="surface" style="margin-top: 18px;">
-      <div class="toolbar">
-        <div>
-          <h3>Teacher Validation Queue</h3>
-          <p class="small-note">Open writing, explanations, recordings, and project artifacts stay reviewable by a human.</p>
+    `;
+  }
+  if (active === "validation") {
+    return `
+      <div class="monitor-panel">
+        <div class="toolbar">
+          <div>
+            <h3>Teacher Validation Queue</h3>
+            <p class="small-note">Open writing, explanations, recordings, and project artifacts stay reviewable by a human.</p>
+          </div>
+        </div>
+        <div class="skill-list">
+          ${renderReviewQueue()}
         </div>
       </div>
-      <div class="skill-list">
-        ${renderReviewQueue()}
+    `;
+  }
+  return `
+    <div class="monitor-panel">
+      <div class="toolbar">
+        <div>
+          <h3>Skill Heatmap</h3>
+          <p class="small-note">The teacher sees a class pattern first, then drills into the evidence for any student.</p>
+        </div>
       </div>
-    </section>
+      ${renderHeatmap()}
+    </div>
   `;
 }
 
@@ -2850,8 +3043,36 @@ function bindViewEvents() {
     };
   });
 
+  document.querySelectorAll("[data-subject-minutes]").forEach((input) => {
+    input.onchange = () => {
+      const subject = input.dataset.subjectMinutes;
+      setState({
+        scheduleConfig: {
+          ...state.scheduleConfig,
+          subjectMinutes: {
+            ...(state.scheduleConfig.subjectMinutes || {}),
+            [subject]: input.value
+          }
+        }
+      });
+    };
+  });
+
   document.querySelectorAll("[data-student-mode]").forEach((button) => {
     button.onclick = () => setState({ studentMode: button.dataset.studentMode });
+  });
+
+  document.querySelectorAll("[data-monitor-tab]").forEach((button) => {
+    button.onclick = () => setState({ monitorTab: button.dataset.monitorTab });
+  });
+
+  const progressSubject = document.querySelector("[data-progress-subject]");
+  if (progressSubject) {
+    progressSubject.onchange = (event) => setState({ studentProgressSubject: event.target.value });
+  }
+
+  document.querySelectorAll("[data-progress-subject-button]").forEach((button) => {
+    button.onclick = () => setState({ studentProgressSubject: button.dataset.progressSubjectButton });
   });
 
   const openResponse = document.querySelector("[data-open-response]");
